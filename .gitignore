@@ -3,3 +3,4 @@ tags
 build
 MANIFEST
 dist
+*.pyc
