@@ -540,9 +540,14 @@ class Module (Doc):
         name = getattr(module, '__pdoc_module_name', module.__name__)
         super(Module, self).__init__(name, module, inspect.getdoc(module))
 
+        file_basename = path.basename(module.__file__)
+        self._show_from_submodules = file_basename in ('__init__.py', '__init__.pyc')
+        """ If true, we will generate documentation for imported modules.  """
+
         self._filtering = docfilter is not None
         self._docfilter = (lambda _: True) if docfilter is None else docfilter
         self._allsubmodules = allsubmodules
+        self._nosubmodules = getattr(module, '__pdoc_nosubmodules', False)
 
         self.doc = {}
         """A mapping from identifier name to a documentation object."""
@@ -577,7 +582,7 @@ class Module (Doc):
             elif inspect.ismodule(obj):
                 # Only document modules that are submodules or are forcefully
                 # exported by __all__.
-                if obj is not self.module and \
+                if obj is not self.module and not self._nosubmodules and \
                         (self.__is_exported(name, obj)
                          or self.is_submodule(obj.__name__)):
                     self.doc[name] = self.__new_submodule(name, obj)
@@ -594,21 +599,23 @@ class Module (Doc):
         else:
             pkgdir = getattr(self.module, '__path__',
                              [path.dirname(self.module.__file__)])
-        for (_, root, _) in pkgutil.iter_modules(pkgdir):
-            if root in self.doc:  # Ignore if this module was already doc'd.
-                continue
 
-            # Ignore if it isn't exported, unless we've specifically requested
-            # to document all submodules.
-            if not self._allsubmodules \
-                    and not self.__is_exported(root, self.module):
-                continue
+        if not self._nosubmodules:
+            for (_, root, _) in pkgutil.iter_modules(pkgdir):
+                if root in self.doc:  # Ignore if this module was already doc'd.
+                    continue
 
-            fullname = '%s.%s' % (self.name, root)
-            m = _safe_import(fullname)
-            if m is None:
-                continue
-            self.doc[root] = self.__new_submodule(root, m)
+                # Ignore if it isn't exported, unless we've specifically requested
+                # to document all submodules.
+                if not self._allsubmodules \
+                        and not self.__is_exported(root, self.module):
+                    continue
+
+                fullname = '%s.%s' % (self.name, root)
+                m = _safe_import(fullname)
+                if m is None:
+                    continue
+                self.doc[root] = self.__new_submodule(root, m)
 
         # Now see if we can grab inheritance relationships between classes.
         for docobj in self.doc.values():
@@ -822,15 +829,23 @@ class Module (Doc):
         not is heuristically determined. Firstly, if `name` starts
         with an underscore, it will not be considered exported.
         Secondly, if `name` was defined in a module other than this
-        one, it will not be considered exported. In all other cases,
-        `name` will be considered exported.
+        one and `self._show_from_submodules` is not set, it will not be
+        considered exported. Lastly, if `self._show_from_submodules` is set
+        and `name` was defined in a module that is not this module or
+        one of its submodules, it will not be considered exported. In
+        all other cases, `name` will be considered exported.
         """
         if hasattr(self.module, '__all__'):
             return name in self.module.__all__
         if not _is_exported(name):
             return False
-        if module is not None and self.module.__name__ != module.__name__:
-            return False
+        if module is not None:
+            if self._show_from_submodules:
+                if not module.__name__.startswith(self.module.__name__):
+                    return False
+            else:
+                if self.module.__name__ != module.__name__:
+                    return False
         return True
 
     def __public_objs(self):
