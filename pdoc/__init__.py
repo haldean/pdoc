@@ -767,6 +767,8 @@ class Module (Doc):
         returned. If one cannot be found, then an instance of
         `External` is returned populated with the given identifier.
         """
+        if name == self.name:
+            return self
         if name in self.refdoc:
             return self.refdoc[name]
         for module in self.submodules():

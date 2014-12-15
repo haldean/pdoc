@@ -318,17 +318,20 @@ def quit_if_exists(m):
         check_file(path.dirname(f))
 
 
-def html_out(m):
+def html_out(m, root_module=None):
     f = module_file(m)
     dirpath = path.dirname(f)
     if not os.access(dirpath, os.R_OK):
         os.makedirs(dirpath)
+    if root_module is None:
+        root_module = m
     try:
         with codecs.open(f, 'w+', 'utf-8') as w:
             out = m.html(external_links=args.external_links,
                          link_prefix=args.link_prefix,
                          http_server=args.http_html,
-                         source=not args.html_no_source)
+                         source=not args.html_no_source,
+                         root_module=root_module)
             print(out, file=w)
     except Exception as e:
         try:
@@ -337,7 +340,7 @@ def html_out(m):
             pass
         raise e
     for submodule in m.submodules():
-        html_out(submodule)
+        html_out(submodule, root_module)
 
 
 def process_html_out(impath):
